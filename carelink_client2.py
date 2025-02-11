@@ -16,8 +16,9 @@
 #    28/12/2023 - Initial version
 #    11/04/2024 - Check for valid data in API response in _get_data()
 #    19/11/2024 - Update CARELINK_CONFIG_URL
+#    11/02/2025 - Update CARELINK_CONFIG_URL to ver 3.3
 #
-#  Copyright 2023-2024, Ondrej Wisniewski 
+#  Copyright 2023-2025, Ondrej Wisniewski
 #
 ###############################################################################
 
@@ -28,7 +29,7 @@
 # carelink_carepartner_api_login.py
 #
 # [0.2] GET base_urls (region=US or region=EU) and sso_config urls
-# GET https://clcloud.minimed.eu/connect/carepartner/v6/discover/android/3.1
+# GET https://clcloud.minimed.eu/connect/carepartner/v11/discover/android/3.3
 #
 # [1] GET role from "baseUrlCareLink"
 # GET /api/carepartner/v2/users/me
@@ -37,10 +38,10 @@
 # GET /api/carepartner/v2/links/patients
 #
 # [3] GET data (providing username, role, patientId) from "baseUrlCumulus"
-# POST /connect/carepartner/v6/display/message
+# POST /connect/carepartner/v11/display/message
 #
 # [4] REFRESH access_token, refresh_token from 
-# sso_config['server']['hostname']:sso_config['server']['port']/sso_config['server']['prefix']/sso_config["oauth"]["system_endpoints"]["token_endpoint_path"]
+# sso_config["server"]["hostname"]:sso_config["server"]["port"]/sso_config["server"]["prefix"]/sso_config["system_endpoints"]["token_endpoint_path"]
 # POST /auth/oauth/v2/token
 
 import json
@@ -53,11 +54,11 @@ from datetime import datetime, timedelta
 
  
 # Version string
-VERSION = "1.2"
+VERSION = "1.3"
 
 # Constants
 DEFAULT_FILENAME="logindata.json"
-CARELINK_CONFIG_URL = "https://clcloud.minimed.eu/connect/carepartner/v11/discover/android/3.2"
+CARELINK_CONFIG_URL = "https://clcloud.minimed.eu/connect/carepartner/v11/discover/android/3.3"
 AUTH_ERROR_CODES = [401,403]
 COMMON_HEADERS = {
                   "Accept": "application/json",
@@ -66,8 +67,8 @@ COMMON_HEADERS = {
                  }
 
 # Logging config
-FORMAT = '[%(asctime)s:%(levelname)s] %(message)s'
-log.basicConfig(format=FORMAT, datefmt='%Y-%m-%d %H:%M:%S', level=log.INFO)
+FORMAT = "[%(asctime)s:%(levelname)s] %(message)s"
+log.basicConfig(format=FORMAT, datefmt="%Y-%m-%d %H:%M:%S", level=log.INFO)
 
 
 ###########################################################
@@ -160,8 +161,10 @@ class CareLinkClient(object):
       resp = requests.get(config["SSOConfiguration"])
       log.debug("   status: %d" % resp.status_code)
       sso_config = resp.json()
-      sso_base_url = f"https://{sso_config['server']['hostname']}:{sso_config['server']['port']}/{sso_config['server']['prefix']}"
-      token_url = sso_base_url + sso_config["oauth"]["system_endpoints"]["token_endpoint_path"]
+      sso_base_url = "https://%s:%d/%s" % (sso_config["server"]["hostname"],
+                                           sso_config["server"]["port"],
+                                           sso_config["server"]["prefix"])
+      token_url = sso_base_url + sso_config["system_endpoints"]["token_endpoint_path"]
       c["token_url"] = token_url
       return config
    
@@ -305,7 +308,7 @@ class CareLinkClient(object):
          return False
       
       # Token is valid
-      auth_token_validto = datetime.utcfromtimestamp(token_validto).strftime('%a %b %d %H:%M:%S UTC %Y')
+      auth_token_validto = datetime.utcfromtimestamp(token_validto).strftime("%a %b %d %H:%M:%S UTC %Y")
       log.info("   access token expires in %ds (%s)" % (tdiff,auth_token_validto))
       return True
 
