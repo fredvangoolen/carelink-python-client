@@ -16,6 +16,7 @@
       - [Using the library](#using-the-library)
       - [Using the proxy tool](#using-the-proxy-tool)
         - [Systemd service](#systemd-service)
+        - [Data GUI](#data-gui)
   - [Credits](#credits)
   - [Disclaimer](#disclaimer)
 
@@ -32,13 +33,13 @@ This is a developer version. Works for me. Extensive testing of different use ca
 
 - [Medtronic MiniMed 780G pump](https://www.medtronic-diabetes.co.uk/insulin-pump-therapy/minimed-780g-system)
 
-- [Medtronic Guardian Connect CGM](https://hcp.medtronic-diabetes.com.au/guardian-connect)
+- [~~Medtronic Guardian Connect CGM~~](https://www.medtronicdiabetes.com/products/guardian-connect-continuous-glucose-monitoring-system)
   
 - [Medtronic MiniMed 770G pump](https://www.medtronicdiabetes.com/products/minimed-770g-insulin-pump-system) 
   - not tested, but should be working
 
 
-  
+
 
 ## Features
 
@@ -89,6 +90,7 @@ The script opens a Firefox web browser with the Carelink login page. You have to
 python3 carelink_carepartner_api_login.py 
 ```
 
+*Note*: you need to add the `--us` option to this command if you have a US Carelink account.
 
 The Carelink Client reads this file from the local folder and it will take care of refreshing automatically the login data when it expires. It should be able to do so within one week of the last refresh.
 
@@ -99,7 +101,7 @@ The Carelink Client reads this file from the local folder and it will take care 
 `carelink_client2_cli.py` is an example Python application which uses the `carelink_client2` library to download the patients Carelink data to a file via the command line. 
 Use the `-h` option for more info. Basic usage:
 ```
-python carelink_client2_cli.py --data
+python3 carelink_client2_cli.py --data
 ```
 
 
@@ -122,7 +124,7 @@ if client.init():
 Use the `-h` option for more info. Basic usage:
 
 ```
-python carelink_client2_proxy.py
+python3 carelink_client2_proxy.py
 ```
 
 The proxy provides the following API endpoints which can be queried with an HTTP `GET` request:
@@ -140,6 +142,12 @@ To run the proxy automatically at system start it can be installed as systemd se
 - [systemd/carelink2-proxy.service](systemd/carelink2-proxy.service)
 
 Make sure to double check the script's path inside the service file.
+
+##### Data GUI
+
+To view the Carelink data provided in the local network by `carelink_client2_proxy.py` you can use the [M5 Minimed Monitor](https://github.com/ondrej1024/m5-minimed-monitor)
+
+![pc-minimed-monitor](doc/pc-minimed-monitor.png)
 
 
 
