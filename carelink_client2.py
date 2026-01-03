@@ -158,12 +158,16 @@ class CareLinkClient(object):
       if config is None:
          raise Exception("ERROR: failed to get config base urls for region %s" % region)
 
-      resp = requests.get(config["SSOConfiguration"])
+      sso_configuration_key = config["UseSSOConfiguration"]
+      resp = requests.get(config[sso_configuration_key])
       log.debug("   status: %d" % resp.status_code)
       sso_config = resp.json()
       sso_base_url = "https://%s:%d/%s" % (sso_config["server"]["hostname"],
                                            sso_config["server"]["port"],
                                            sso_config["server"]["prefix"])
+      if sso_base_url.endswith('/'):
+         sso_base_url = sso_base_url[:-1] # remove trailing slash if prefix is empty
+
       token_url = sso_base_url + sso_config["system_endpoints"]["token_endpoint_path"]
       c["token_url"] = token_url
       return config
@@ -248,9 +252,10 @@ class CareLinkClient(object):
       data = {
          "refresh_token": token_data["refresh_token"],
          "client_id":     token_data["client_id"],
-         "client_secret": token_data["client_secret"],
          "grant_type":    "refresh_token"
          }
+      if "client_secret" in token_data:
+         data["client_secret"] = token_data["client_secret"]
       headers = {}
       if "mag-identifier" in token_data:
          headers["mag-identifier"] = token_data["mag-identifier"]
