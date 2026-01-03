@@ -17,8 +17,9 @@
 #    11/04/2024 - Check for valid data in API response in _get_data()
 #    19/11/2024 - Update CARELINK_CONFIG_URL
 #    11/02/2025 - Update CARELINK_CONFIG_URL to ver 3.3
+#    03/01/2026 - Fix for new Auth method
 #
-#  Copyright 2023-2025, Ondrej Wisniewski
+#  Copyright 2023-2026, Ondrej Wisniewski
 #
 ###############################################################################
 
@@ -54,7 +55,7 @@ from datetime import datetime, timedelta
 
  
 # Version string
-VERSION = "1.3"
+VERSION = "1.4"
 
 # Constants
 DEFAULT_FILENAME="logindata.json"
