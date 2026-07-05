@@ -28,8 +28,9 @@
 #    03/01/2024 - Porting to Carelink Client 2
 #    11/04/2024 - Handle reconnection in case of network error
 #    17/01/2025 - Adapt get_essential_data() to new data format
+#    04/07/2026 - Adapt time until next reading calculation to new data format
 #
-#  Copyright 2021-2025, Ondrej Wisniewski
+#  Copyright 2021-2026, Ondrej Wisniewski
 #
 ###############################################################################
 
@@ -46,7 +47,7 @@ from http import HTTPStatus
 from urllib.parse import parse_qs
 
 
-VERSION = "1.2"
+VERSION = "1.3"
 
 # Logging config
 FORMAT = '[%(asctime)s:%(levelname)s] %(message)s'
@@ -269,7 +270,8 @@ verbose   = args.verbose
 
 # Logging config (verbose)
 if verbose:
-   log.enable(level=log.DEBUG)
+   log.getLogger().setLevel(log.DEBUG)
+   log.debug("Logging is vebose")
 
 log.info("Starting Carelink Client Proxy (version %s)" % VERSION)
 
@@ -317,8 +319,9 @@ while True:
             
          # Calculate time until next reading
          try:
-            nextReading = int(recentData["lastConduitUpdateServerTime"]/1000) + wait
+            nextReading = int(recentData["patientData"]["lastConduitUpdateServerDateTime"]/1000) + wait
             tmoSeconds  = int(nextReading - time.time())
+            #print("Next reading at {0}, {1} seconds from now\n".format(nextReading,tmoSeconds))
             log.debug("Next reading at {0}, {1} seconds from now\n".format(nextReading,tmoSeconds))
             if tmoSeconds < 0:
                tmoSeconds = RETRY_INTERVAL
