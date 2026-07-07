@@ -17,8 +17,9 @@
 #    11/04/2024 - Check for valid data in API response in _get_data()
 #    19/11/2024 - Update CARELINK_CONFIG_URL
 #    11/02/2025 - Update CARELINK_CONFIG_URL to ver 3.3
+#    03/01/2026 - Fix for new Auth method (by @m0rt4l1n)
 #
-#  Copyright 2023-2025, Ondrej Wisniewski
+#  Copyright 2023-2026, Ondrej Wisniewski
 #
 ###############################################################################
 
@@ -54,11 +55,11 @@ from datetime import datetime, timedelta
 
  
 # Version string
-VERSION = "1.3"
+VERSION = "1.4"
 
 # Constants
 DEFAULT_FILENAME="logindata.json"
-CARELINK_CONFIG_URL = "https://clcloud.minimed.eu/connect/carepartner/v11/discover/android/3.3"
+CARELINK_CONFIG_URL = "https://clcloud.minimed.eu/connect/carepartner/v13/discover/android/3.6"
 AUTH_ERROR_CODES = [401,403]
 COMMON_HEADERS = {
                   "Accept": "application/json",
@@ -114,7 +115,7 @@ class CareLinkClient(object):
             log.error("ERROR: failed parsing token file %s" % filename)
 
          if token_data is not None:
-            required_fields = ["access_token", "refresh_token", "scope", "client_id", "client_secret", "mag-identifier"]
+            required_fields = ["access_token", "refresh_token", "scope", "client_id"]
             for f in required_fields:
                if f not in token_data:
                   log.error("ERROR: field %s is missing from token file" % f)
@@ -158,12 +159,16 @@ class CareLinkClient(object):
       if config is None:
          raise Exception("ERROR: failed to get config base urls for region %s" % region)
 
-      resp = requests.get(config["SSOConfiguration"])
+      sso_configuration_key = config["UseSSOConfiguration"]
+      resp = requests.get(config[sso_configuration_key])
       log.debug("   status: %d" % resp.status_code)
       sso_config = resp.json()
       sso_base_url = "https://%s:%d/%s" % (sso_config["server"]["hostname"],
                                            sso_config["server"]["port"],
                                            sso_config["server"]["prefix"])
+      if sso_base_url.endswith('/'):
+         sso_base_url = sso_base_url[:-1] # remove trailing slash if prefix is empty
+
       token_url = sso_base_url + sso_config["system_endpoints"]["token_endpoint_path"]
       c["token_url"] = token_url
       return config
@@ -175,7 +180,8 @@ class CareLinkClient(object):
       log.info("_get_user()")
       url = config["baseUrlCareLink"] + "/users/me"
       headers = COMMON_HEADERS
-      headers["mag-identifier"] = token_data["mag-identifier"]
+      if "mag-identifier" in token_data:
+         headers["mag-identifier"] = token_data["mag-identifier"]
       headers["Authorization"] = "Bearer " + token_data["access_token"]
       self.__last_api_status = None
       resp = requests.get(url=url,headers=headers)
@@ -194,7 +200,8 @@ class CareLinkClient(object):
       log.info("_get_patient()")
       url = config["baseUrlCareLink"] + "/links/patients"
       headers = COMMON_HEADERS
-      headers["mag-identifier"] = token_data["mag-identifier"]
+      if "mag-identifier" in token_data:
+         headers["mag-identifier"] = token_data["mag-identifier"]
       headers["Authorization"] = "Bearer " + token_data["access_token"]
       self.__last_api_status = None
       resp = requests.get(url=url,headers=headers)
@@ -213,7 +220,8 @@ class CareLinkClient(object):
       log.info("_get_data()")
       url = config["baseUrlCumulus"] + "/display/message"
       headers = COMMON_HEADERS
-      headers["mag-identifier"] = token_data["mag-identifier"]
+      if "mag-identifier" in token_data:
+         headers["mag-identifier"] = token_data["mag-identifier"]
       headers["Authorization"] = "Bearer " + token_data["access_token"]
       data = {}
       data["username"] = username
@@ -245,12 +253,13 @@ class CareLinkClient(object):
       data = {
          "refresh_token": token_data["refresh_token"],
          "client_id":     token_data["client_id"],
-         "client_secret": token_data["client_secret"],
          "grant_type":    "refresh_token"
          }
-      headers = {
-         "mag-identifier": token_data["mag-identifier"]
-         }
+      if "client_secret" in token_data:
+         data["client_secret"] = token_data["client_secret"]
+      headers = {}
+      if "mag-identifier" in token_data:
+         headers["mag-identifier"] = token_data["mag-identifier"]
       resp = requests.post(url=token_url, headers=headers, data=data)
       log.debug("   status: %d" % resp.status_code)
       if resp.status_code != 200:
