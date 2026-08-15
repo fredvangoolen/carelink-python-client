@@ -113,7 +113,7 @@ def get_essential_data(data):
    return mydata
    
 
-def webgui(status,action=None,country=""):
+def webgui(status,action=None,error=""):
    head =  '<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd"> \n \
             <html><head><title>Carelink Client 2 Proxy</title> \n \
             <style></style> \n \
@@ -122,8 +122,8 @@ def webgui(status,action=None,country=""):
             <tbody><tr><td> \n \
             <span style="vertical-align: top; font-size: 48px;">Carelink Client 2</span><br> \n \
             </td></tr></tbody></table><br> \n'
-            
-            
+
+
    body =  '<table style="text-align: left; width: 460px; background-color: white; font-family: Helvetica,Arial,sans-serif; font-size: 18px;" border="0" cellpadding="2" cellspacing="3"><tbody> \n \
             <tr style="font-size: 18px; font-weight: bold; background-color: lightgrey"> \n \
             <td style="width: 200px;">Status</td> \n \
@@ -131,15 +131,49 @@ def webgui(status,action=None,country=""):
             <tr style="vertical-align: top; background-color: rgb(230, 230, 255);"> \n \
             <td style="width: 300px;">%s</td> \n \
             </tbody></table><br> \n' % (status)
-                        
+
+   form = ""
+   if action is not None:
+      form = '<table style="text-align: left; width: 460px; background-color: white; font-family: Helvetica,Arial,sans-serif; font-size: 14px;" border="0" cellpadding="2" cellspacing="3"><tbody> \n \
+            <tr><td>Paste the full contents of a freshly generated <code>logindata.json</code> \n \
+            (produced by running <code>carelink_carepartner_api_login.py</code> on a machine with a browser) below:</td></tr> \n \
+            <tr><td style="color: red;">%s</td></tr> \n \
+            <tr><td> \n \
+            <form method="POST" action="/%s"> \n \
+            <textarea name="tokendata" rows="12" cols="60"></textarea><br> \n \
+            <input type="submit" value="Save token"> \n \
+            </form> \n \
+            </td></tr> \n \
+            </tbody></table><br> \n' % (error, action)
+
    tail =  '<span style="font-size: 16px; color: red; font-family: Helvetica,Arial,sans-serif;"></span><br> \n \
             <table style="text-align: left; width: 460px; background-color: #2196F3;" border="0" cellpadding="2" cellspacing="2"><tbody> \n \
             <tr><td style="vertical-align: top; text-align: center;"> \n \
             <span style="font-family: Helvetica,Arial,sans-serif; color: white;"><a style="text-decoration:none; color: white;" href=https://github.com/ondrej1024/carelink-python-client>carelink_client2_proxy</a> | version %s | 2024</span></td></tr> \n \
             </tbody></table></body></html>' % VERSION
-   
-   html = head + body + tail
+
+   html = head + body + form + tail
    return html
+
+
+#################################################
+# Validate and save token data posted from the web GUI,
+# then wake up the main loop so it re-inits the client
+#################################################
+def save_params(tokendata):
+   global wait_for_params
+
+   token_data = json.loads(tokendata)
+   required_fields = ["access_token", "refresh_token", "scope", "client_id"]
+   for f in required_fields:
+      if f not in token_data:
+         raise ValueError("field %s is missing from pasted token data" % f)
+
+   with open(tokenfile, 'w') as f:
+      json.dump(token_data, f, indent=4)
+   log.info("New token data saved to %s via web GUI" % tokenfile)
+
+   wait_for_params = False
 
 
 #################################################
@@ -195,35 +229,31 @@ class MyServer(BaseHTTPRequestHandler):
       except BrokenPipeError:
          pass
 
-   '''
    def do_POST(self):
       # Get request body
       content_length = int(self.headers['Content-Length'])
       body = self.rfile.read(content_length)
       log.debug("received client POST request from %s" % (self.address_string()))
-      #print(body)
 
       # Check request path
       if self.path.strip("/") == GUIURL:
          # Save setup data
+         content_type = "text/html"
          try:
             qs = body.decode()
-            token = parse_qs(qs)['ftoken'][0]
-            country = parse_qs(qs)['fcountry'][0]
-            if token == "" or token == None:
-               raise
-            save_params(token,country)
+            tokendata = parse_qs(qs)['tokendata'][0]
+            save_params(tokendata)
             time.sleep(2)
             response = webgui(status=g_status)
-         except:
-            response = webgui(status=g_status, action=GUIURL)
+         except Exception as e:
+            log.error("ERROR: failed to save posted token data: %s" % e)
+            response = webgui(status=g_status, action=GUIURL, error=str(e))
          status_code = HTTPStatus.OK
-         content_type = "text/html"
-         #print("Config data received")
       else:
          response = ""
          status_code = HTTPStatus.NOT_FOUND
-   
+         content_type = "text/html"
+
       # Send response
       self.send_response(status_code)
       self.send_header("Content-type", content_type)
@@ -233,7 +263,6 @@ class MyServer(BaseHTTPRequestHandler):
          self.wfile.write(bytes(response, "utf-8"))
       except BrokenPipeError:
          pass
-   '''
 
 #################################################
 # Web server thread
