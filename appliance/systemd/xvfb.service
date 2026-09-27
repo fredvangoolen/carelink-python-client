@@ -1,0 +1,11 @@
+[Unit]
+Description=Virtual framebuffer for CareLink renewal browser
+After=network.target
+
+[Service]
+User=__USER__
+ExecStart=/usr/bin/Xvfb __DISPLAY__ -screen 0 __GEOMETRY__ -nolisten tcp
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
