@@ -1,0 +1,22 @@
+[Unit]
+Description=x11vnc server for CareLink renewal display
+After=openbox-session.service
+Requires=openbox-session.service
+PartOf=xvfb.service
+
+[Service]
+User=__USER__
+Environment=DISPLAY=__DISPLAY__
+# -localhost is the security boundary: x11vnc refuses anything but loopback,
+# so websockify is the ONLY thing reachable from the household LAN. One
+# well-understood point of exposure instead of two.
+ExecStart=/usr/bin/x11vnc -display __DISPLAY__ -rfbauth __VNCPASSWD__ -forever -shared -rfbport 5900 -localhost -noxdamage
+# x11vnc exits 2 when it is signalled, which is exactly how this chain is
+# always stopped. Without this every normal teardown leaves a failed unit,
+# and a box that claims to be trustworthy must not train its operator to
+# ignore `systemctl --failed`.
+SuccessExitStatus=2
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

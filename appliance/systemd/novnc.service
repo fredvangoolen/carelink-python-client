@@ -1,0 +1,13 @@
+[Unit]
+Description=noVNC web proxy for CareLink renewal display
+After=x11vnc.service
+Requires=x11vnc.service
+PartOf=xvfb.service
+
+[Service]
+User=__USER__
+ExecStart=/usr/bin/websockify --web=__NOVNC_WEB__ __NOVNC_PORT__ localhost:5900
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

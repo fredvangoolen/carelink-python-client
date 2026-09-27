@@ -1,0 +1,15 @@
+[Unit]
+Description=Openbox window manager on the virtual display
+After=xvfb.service
+Requires=xvfb.service
+# PartOf so that stopping xvfb tears the whole chain down in one command.
+PartOf=xvfb.service
+
+[Service]
+User=__USER__
+Environment=DISPLAY=__DISPLAY__
+ExecStart=/usr/bin/openbox
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
