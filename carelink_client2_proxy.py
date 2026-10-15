@@ -44,7 +44,8 @@ import threading
 import logging as log
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from http import HTTPStatus
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlsplit
+import html
 
 
 VERSION = "1.3"
@@ -57,6 +58,11 @@ log.basicConfig(format=FORMAT, datefmt='%Y-%m-%d %H:%M:%S', level=log.INFO)
 HOSTNAME = "0.0.0.0"
 PORT     = 8081
 GUIURL   = ""
+
+# A real logindata.json is about 2.6KB. Anything far beyond that is not a
+# token, and reading an unbounded body into memory on request is a free way
+# to knock the proxy over.
+MAX_POST_BYTES = 16 * 1024
 APIURL   = "carelink"
 OPT_NOHISTORY = "nohistory"
 
@@ -185,9 +191,38 @@ class MyServer(BaseHTTPRequestHandler):
       #Disable logging
       pass
 
+   def _reply(self, status_code, content_type, response):
+      # Deliberately NO Access-Control-Allow-Origin. It used to be "*", which
+      # let any web page open in any browser on the same network read the
+      # full patient record cross-origin - no compromise needed, just a bad
+      # page in a household browser. Nothing that consumes this proxy is a
+      # browser: the displays fetch it directly, and CORS does not apply to
+      # them at all.
+      self.send_response(status_code)
+      self.send_header("Content-type", content_type)
+      self.end_headers()
+      try:
+         self.wfile.write(bytes(response, "utf-8"))
+      except BrokenPipeError:
+         pass
+
+   def _same_origin(self):
+      # A browser attaches Origin to every cross-site POST, so a request whose
+      # Origin is not this proxy's own host:port was sent by some OTHER page.
+      # That is the case that matters: during an outage, the person with the
+      # recovery page open is exactly the person whose browser another tab
+      # could use to submit a token. A non-browser client sends no Origin;
+      # there is nothing for a web page to forge there, so it is allowed.
+      origin = self.headers.get("Origin")
+      if origin is None:
+         return True
+      host = (self.headers.get("Host") or "").lower()
+      return origin != "null" and urlsplit(origin).netloc.lower() == host
+
    def do_GET(self):
-      # Security checks (if any)
-      # TODO
+      # Reads are open to the LAN by design: the displays that consume this
+      # cannot authenticate, and the household network is the trust boundary.
+      # What IS guarded is the one write - see do_POST.
       log.debug("received client GET request from %s" % (self.address_string()))
       #print(self.path)
       
@@ -218,51 +253,57 @@ class MyServer(BaseHTTPRequestHandler):
          status_code = HTTPStatus.NOT_FOUND
          content_type = "text/html"
          #print("page not found")
-      
-      # Send response
-      self.send_response(status_code)
-      self.send_header("Content-type", content_type)
-      self.send_header("Access-Control-Allow-Origin", "*")
-      self.end_headers()
-      try:
-         self.wfile.write(bytes(response, "utf-8"))
-      except BrokenPipeError:
-         pass
+
+      self._reply(status_code, content_type, response)
 
    def do_POST(self):
-      # Get request body
-      content_length = int(self.headers['Content-Length'])
-      body = self.rfile.read(content_length)
       log.debug("received client POST request from %s" % (self.address_string()))
 
-      # Check request path
-      if self.path.strip("/") == GUIURL:
-         # Save setup data
-         content_type = "text/html"
-         try:
-            qs = body.decode()
-            tokendata = parse_qs(qs)['tokendata'][0]
-            save_params(tokendata)
-            time.sleep(2)
-            response = webgui(status=g_status)
-         except Exception as e:
-            log.error("ERROR: failed to save posted token data: %s" % e)
-            response = webgui(status=g_status, action=GUIURL, error=str(e))
-         status_code = HTTPStatus.OK
-      else:
-         response = ""
-         status_code = HTTPStatus.NOT_FOUND
-         content_type = "text/html"
+      if self.path.strip("/") != GUIURL:
+         self._reply(HTTPStatus.NOT_FOUND, "text/html", "")
+         return
 
-      # Send response
-      self.send_response(status_code)
-      self.send_header("Content-type", content_type)
-      self.send_header("Access-Control-Allow-Origin", "*")
-      self.end_headers()
+      # Only while a token is actually wanted. GUIURL is "", so this used to
+      # accept a token posted to "/" at ANY time, unauthenticated - including
+      # while a perfectly good session was running. Anyone on the network
+      # could replace the credential: stopping the monitor, or worse,
+      # pointing it at a different CareLink account so the displays showed
+      # somebody else's glucose with nothing on screen to say so.
+      if g_status != STATUS_NEED_TKN:
+         log.warning("refused token POST from %s: not waiting for a token (%s)"
+                     % (self.address_string(), g_status))
+         self._reply(HTTPStatus.FORBIDDEN, "text/plain",
+                     "A token can only be submitted while the proxy is waiting for one.\n")
+         return
+
+      if not self._same_origin():
+         log.warning("refused cross-site token POST from %s (Origin %s)"
+                     % (self.address_string(), self.headers.get("Origin")))
+         self._reply(HTTPStatus.FORBIDDEN, "text/plain",
+                     "Cross-site token submission refused.\n")
+         return
+
       try:
-         self.wfile.write(bytes(response, "utf-8"))
-      except BrokenPipeError:
-         pass
+         content_length = int(self.headers.get("Content-Length", ""))
+      except ValueError:
+         self._reply(HTTPStatus.LENGTH_REQUIRED, "text/plain", "Content-Length required.\n")
+         return
+      if content_length < 0 or content_length > MAX_POST_BYTES:
+         self._reply(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "text/plain", "Request too large.\n")
+         return
+      body = self.rfile.read(content_length)
+
+      try:
+         qs = body.decode()
+         tokendata = parse_qs(qs)['tokendata'][0]
+         save_params(tokendata)
+         time.sleep(2)
+         response = webgui(status=g_status)
+      except Exception as e:
+         log.error("ERROR: failed to save posted token data: %s" % e)
+         # Escaped: this text is echoed straight into the page.
+         response = webgui(status=g_status, action=GUIURL, error=html.escape(str(e)))
+      self._reply(HTTPStatus.OK, "text/html", response)
 
 #################################################
 # Web server thread
