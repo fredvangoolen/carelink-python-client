@@ -56,6 +56,10 @@ x11vnc -storepasswd ~/.vnc/passwd          # unique per household
 sudo systemctl enable --now carelink2-proxy.service
 ```
 
+`provision.sh` creates `~/.vnc` (mode 0700) for it; `x11vnc -storepasswd`
+will not, and fails with `No such file or directory` without it. On a box
+provisioned before that, run `mkdir -p -m 700 ~/.vnc` first.
+
 The password is not automated because it should never pass through a script,
 a log or a transcript. VNC auth truncates to 8 characters, so anything longer
 is decoration; that is tolerable only because of how little is exposed and for
