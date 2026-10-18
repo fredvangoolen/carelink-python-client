@@ -80,6 +80,9 @@ sudo install -d -m 0755 "$PROXY_DIR"
 sudo install -m 0644 "$SRC/carelink_client2.py"       "$PROXY_DIR/"
 sudo install -m 0644 "$SRC/carelink_client2_proxy.py" "$PROXY_DIR/"
 sudo install -d -m 0700 "$TOKEN_DIR"
+# Where the VNC password goes. x11vnc -storepasswd will not create the
+# directory, and fails with "No such file or directory" on a fresh install.
+sudo install -d -m 0700 -o "$RENEW_USER" -g "$RENEW_USER" "$(dirname "$VNCPASSWD")"
 
 say "systemd units"
 for unit in xvfb openbox-session x11vnc novnc; do
