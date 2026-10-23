@@ -49,6 +49,13 @@ git clone <this repo> && cd carelink-python-client
 Idempotent — re-running is how you upgrade, and it converges an existing box
 without touching an installed token.
 
+It also turns on **automatic security updates** (`unattended-upgrades`):
+Debian security plus the Raspberry Pi archive, which carries the kernel and
+firmware and is not in Debian's defaults. When an update needs a reboot, the
+box reboots at **14:00**, never overnight, when the monitor matters most. The
+display misses about two minutes. Check what it did with
+`journalctl -u unattended-upgrades` or `/var/log/unattended-upgrades/`.
+
 Two steps are deliberately left to a human:
 
 ```bash
