@@ -119,6 +119,29 @@ EOF
 sudo chmod 0440 /etc/sudoers.d/carelink-renewal
 sudo visudo -c -f /etc/sudoers.d/carelink-renewal
 
+say "security updates"
+# An appliance nobody logs into must patch itself. Without this package the
+# apt timers only refresh lists: a box staged in September was found 149
+# updates behind in October. Debian-Security is in the package defaults; the
+# Raspberry Pi archive (kernel, firmware, rpi-connect) is not, so it is added.
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends unattended-upgrades
+sudo tee /etc/apt/apt.conf.d/20auto-upgrades >/dev/null <<'EOF'
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+EOF
+sudo tee /etc/apt/apt.conf.d/52carelink-unattended >/dev/null <<'EOF'
+// CareLink appliance: security updates daily, unattended.
+// Debian-Security comes from 50unattended-upgrades; the Raspberry Pi archive
+// (kernel, firmware, rpi-connect) is not in Debian's defaults, so add it.
+Unattended-Upgrade::Origins-Pattern {
+        "origin=Raspberry Pi Foundation,codename=${distro_codename},label=Raspberry Pi Foundation";
+};
+// Reboot only when an update needs it, and then by day: overnight is when
+// the monitor matters most.
+Unattended-Upgrade::Automatic-Reboot "true";
+Unattended-Upgrade::Automatic-Reboot-Time "14:00";
+EOF
+
 say "done"
 cat <<EOF
 
