@@ -49,6 +49,9 @@ git clone <this repo> && cd carelink-python-client
 Idempotent — re-running is how you upgrade, and it converges an existing box
 without touching an installed token.
 
+It keeps the **system log on disk** (capped at 50 MB): Raspberry Pi OS keeps
+it in RAM only, which loses the reason for any unexpected reboot.
+
 It also turns on **automatic security updates** (`unattended-upgrades`):
 Debian security plus the Raspberry Pi archive, which carries the kernel and
 firmware and is not in Debian's defaults. When an update needs a reboot, the
@@ -73,6 +76,13 @@ is decoration; that is tolerable only because of how little is exposed and for
 how short a time.
 
 ## Renewing a token
+
+First make sure one is needed. A proxy that could not start, for example
+after a power cut that took the router down too, says *Valid token required*
+but keeps retrying the stored token by itself: after 1 minute, then doubling
+up to every 30 minutes. If the display says *CareLink login needed* right
+after a power cut, restart the proxy (`sudo systemctl restart
+carelink2-proxy`) and watch the journal before arranging a renewal.
 
 ```bash
 /opt/carelink-renewal/renew.sh

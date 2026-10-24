@@ -72,6 +72,10 @@ RETRY_INTERVAL  = 120
 # Token handling
 TOKENFILE = "logindata.json"
 wait_for_params = True
+# A failed start is retried with the stored token, not only on a new one.
+# Doubling from the first value up to the cap.
+INIT_RETRY_FIRST_S = 60
+INIT_RETRY_MAX_S   = 1800
 
 # Status messages
 STATUS_INIT     = "Initialization"
@@ -353,6 +357,7 @@ signal.signal(signal.SIGINT, on_sigterm)
 start_webserver()
 
 # Main process loop
+init_retry_s = INIT_RETRY_FIRST_S
 while True:
    # Init Carelink client
    client = carelink_client2.CareLinkClient(tokenFile=tokenfile)
@@ -361,6 +366,7 @@ while True:
    # Login to Carelink server
    if client.init():
       g_status = STATUS_LOGIN_OK
+      init_retry_s = INIT_RETRY_FIRST_S
 
       # Infinite loop requesting Carelink data periodically
       i = 0
@@ -402,12 +408,22 @@ while True:
          log.debug("Waiting " + str(tmoSeconds) + " seconds before next download")
          time.sleep(tmoSeconds+10)
 
-   # Wait for new token
-   # FIXME
+   # Wait for a new token - but not only for one. A failed start is not
+   # always a bad token: after a power cut the Pi is often back before the
+   # router, init() cannot even resolve the CareLink host, and waiting for a
+   # POST alone left a working token unused until someone restarted the
+   # service by hand (seen on carelink-piet, 2026-10-24: 14 hours stuck on a
+   # token that refreshed fine the moment the proxy was restarted). So keep
+   # accepting a new token, and also retry the stored one, backing off to
+   # INIT_RETRY_MAX_S so a token that really is dead costs one request per
+   # half hour.
    log.info(STATUS_NEED_TKN)
    g_status = STATUS_NEED_TKN
+   log.info("Retrying with the stored token in %d s" % init_retry_s)
+   retry_at = time.time() + init_retry_s
+   init_retry_s = min(init_retry_s * 2, INIT_RETRY_MAX_S)
    wait_for_params = True
-   while wait_for_params:
+   while wait_for_params and time.time() < retry_at:
       time.sleep(0.1)
 
 # Exit         
