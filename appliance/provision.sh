@@ -142,6 +142,20 @@ Unattended-Upgrade::Automatic-Reboot "true";
 Unattended-Upgrade::Automatic-Reboot-Time "14:00";
 EOF
 
+say "persistent journal"
+# Raspberry Pi OS keeps the journal in RAM (40-rpi-volatile-storage.conf, to
+# spare the SD card), so everything before a reboot is lost - including WHY
+# it rebooted. carelink-piet restarted once with no trace of the cause. Keep
+# it on disk, capped, so a mystery restart can be explained afterwards.
+sudo install -d -m 0755 /etc/systemd/journald.conf.d
+sudo tee /etc/systemd/journald.conf.d/50-carelink-persistent.conf >/dev/null <<'EOF'
+[Journal]
+Storage=persistent
+SystemMaxUse=50M
+EOF
+sudo systemctl restart systemd-journald
+sudo journalctl --flush
+
 say "done"
 cat <<EOF
 
