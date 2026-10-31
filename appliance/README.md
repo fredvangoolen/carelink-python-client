@@ -75,6 +75,42 @@ a log or a transcript. VNC auth truncates to 8 characters, so anything longer
 is decoration; that is tolerable only because of how little is exposed and for
 how short a time.
 
+## Fallback setup hotspot
+
+A proxy taken somewhere with WiFi only - a holiday house, a household with
+no free router port - has no way to be told the WiFi password. So when the
+Pi boots with **no network at all** (no Ethernet link and no known WiFi for
+90 seconds), it raises a WPA2 hotspot, `<hostname>-setup`, for **5 minutes**.
+A phone that scans the label joins it and is taken to one page: pick a
+network, give its password, Connect. The Pi joins, keeps the network for next
+time, and the hotspot closes. A Pi that has a network never broadcasts it.
+
+It is a door through the trusted-LAN boundary, so it is kept small:
+
+- only when there is no network, and only for 5 minutes per boot;
+- a password unique to each Pi, made once by `provision.sh` and kept in
+  `/etc/carelink/setup-ap.psk` (root, 0600) across re-runs;
+- while it is up, hotspot clients reach the setup page and nothing else:
+  SSH, 8081, 6080 and 5900 are dropped on that interface and nothing is
+  forwarded (nftables table `carelink_setup_ap`, removed with the hotspot);
+- the page takes a WiFi name and password and does nothing else.
+
+**The label** is made on the staging laptop, not on the Pi, which then needs
+no QR tool and keeps no image of the password:
+
+```bash
+appliance/make-label.sh admin@carelink-<name>.local     # --text also prints the password
+```
+
+It writes `carelink-<name>-setup-ap-label.png` (a WiFi QR code, via
+`qrencode` or `segno` through `uv`). Print it, stick it on the Pi, delete the
+file.
+
+To test without unplugging anything:
+`sudo FORCE=1 /opt/carelink-setup-ap/carelink-setup-ap.sh` raises it for 5
+minutes even with a network present. The service is `carelink-setup-ap`;
+`journalctl -u carelink-setup-ap -b` says what it did at boot.
+
 ## Renewing a token
 
 First make sure one is needed. A proxy that could not start, for example
