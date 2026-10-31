@@ -20,6 +20,9 @@ GECKODRIVER_VERSION="${GECKODRIVER_VERSION:-v0.37.1}"
 
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VNCPASSWD="/home/${RENEW_USER}/.vnc/passwd"
+WIFI_COUNTRY="${WIFI_COUNTRY:-BE}"   # regulatory domain; the radio stays off without one
+AP_DIR="/opt/carelink-setup-ap"
+AP_PSK_FILE="/etc/carelink/setup-ap.psk"
 
 say() { printf '\n== %s\n' "$*"; }
 
@@ -155,6 +158,45 @@ SystemMaxUse=50M
 EOF
 sudo systemctl restart systemd-journald
 sudo journalctl --flush
+
+say "fallback setup hotspot"
+# When the Pi boots with no network at all - taken somewhere with WiFi only -
+# it raises a WPA2 hotspot for 5 minutes so a phone can give it one. Never
+# while it has a network. See appliance/setup-ap/carelink-setup-ap.sh.
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    dnsmasq-base nftables
+command -v raspi-config >/dev/null && sudo raspi-config nonint do_wifi_country "$WIFI_COUNTRY" || true
+sudo install -d -m 0755 "$AP_DIR"
+sudo install -m 0755 "$SRC/appliance/setup-ap/carelink-setup-ap.sh" "$AP_DIR/"
+sudo install -m 0644 "$SRC/appliance/setup-ap/setup_ap_server.py"   "$AP_DIR/"
+sudo install -m 0644 "$SRC/appliance/systemd/carelink-setup-ap.service" /etc/systemd/system/
+# Captive portal: on the hotspot every name resolves to the Pi, so a phone
+# opens the setup page by itself. Applies to NetworkManager "shared"
+# connections only, which on this box is the hotspot alone.
+sudo install -d -m 0755 /etc/NetworkManager/dnsmasq-shared.d
+echo "address=/#/10.42.0.1" | sudo tee /etc/NetworkManager/dnsmasq-shared.d/carelink-setup-ap.conf >/dev/null
+# One password per Pi, made once and kept across re-runs: it is on the
+# label, and a re-run must not invalidate the label.
+AP_SSID="$(hostname)-setup"
+if ! sudo test -s "$AP_PSK_FILE"; then
+  sudo install -d -m 0700 "$(dirname "$AP_PSK_FILE")"
+  python3 -c 'import secrets; a="abcdefghjkmnpqrstuvwxyz23456789"; print("".join(secrets.choice(a) for _ in range(12)))' \
+    | sudo tee "$AP_PSK_FILE" >/dev/null
+  sudo chmod 0600 "$AP_PSK_FILE"
+fi
+AP_PSK="$(sudo cat "$AP_PSK_FILE")"
+sudo nmcli con delete carelink-setup-ap >/dev/null 2>&1 || true
+sudo nmcli con add type wifi ifname wlan0 con-name carelink-setup-ap autoconnect no \
+    ssid "$AP_SSID" mode ap 802-11-wireless.band bg ipv4.method shared ipv6.method disabled \
+    wifi-sec.key-mgmt wpa-psk wifi-sec.proto rsn wifi-sec.pairwise ccmp wifi-sec.group ccmp \
+    wifi-sec.psk "$AP_PSK" >/dev/null
+sudo systemctl daemon-reload
+sudo systemctl enable carelink-setup-ap.service >/dev/null 2>&1
+unset AP_PSK
+# The label is made on the staging laptop, not here: the Pi needs no QR
+# tool, and no image of the password is left lying in a home directory.
+echo "Setup hotspot: ${AP_SSID}. Make its label from your laptop:"
+echo "    appliance/make-label.sh $(hostname).local"
 
 say "done"
 cat <<EOF

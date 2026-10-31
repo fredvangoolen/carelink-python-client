@@ -1,0 +1,14 @@
+[Unit]
+Description=CareLink proxy fallback setup hotspot (only when there is no network)
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=simple
+ExecStart=/opt/carelink-setup-ap/carelink-setup-ap.sh
+# Once per boot: a Pi that loses its network later is moved, and moving it
+# means a power cycle.
+Restart=no
+
+[Install]
+WantedBy=multi-user.target
