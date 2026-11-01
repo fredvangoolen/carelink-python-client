@@ -1,0 +1,7 @@
+[Unit]
+Description=Reconnect a proxy on WiFi after NetworkManager gave up
+After=NetworkManager.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/carelink-wifi-watchdog/carelink-wifi-watchdog.sh

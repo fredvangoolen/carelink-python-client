@@ -111,6 +111,22 @@ To test without unplugging anything:
 minutes even with a network present. The service is `carelink-setup-ap`;
 `journalctl -u carelink-setup-ap -b` says what it did at boot.
 
+## WiFi watchdog
+
+NetworkManager on a headless Pi treats a disconnect during the WPA key
+exchange as a wrong password, asks for a new one, finds nobody to ask, and
+stops connecting to that network for good. One router hiccup is enough:
+carelink-piet sat offline for 10 hours after its router steered it to a radio
+whose WPA2/WPA3 announcement did not match its key exchange
+(`IE in 3/4 msg does not match`, then `no secrets: No agents were available`).
+
+`carelink-wifi-watchdog.timer` checks every 2 minutes. With no Ethernet link,
+`wlan0` disconnected, no setup hotspot up and a saved WiFi network, it brings
+the saved networks up by hand, most recently used first. It does nothing on
+Ethernet. `journalctl -u carelink-wifi-watchdog` lists every reconnect, which
+also shows a flaky router. Test it on a Pi that is on the cable with
+`sudo IGNORE_ETHERNET=1 /opt/carelink-wifi-watchdog/carelink-wifi-watchdog.sh`.
+
 ## Renewing a token
 
 First make sure one is needed. A proxy that could not start, for example

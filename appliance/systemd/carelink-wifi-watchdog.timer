@@ -1,0 +1,10 @@
+[Unit]
+Description=Check every 2 minutes that a proxy on WiFi is still on its network
+
+[Timer]
+# Not before the setup hotspot has had its chance at boot (90 s wait).
+OnBootSec=3min
+OnUnitActiveSec=2min
+
+[Install]
+WantedBy=timers.target
