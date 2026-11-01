@@ -198,6 +198,17 @@ unset AP_PSK
 echo "Setup hotspot: ${AP_SSID}. Make its label from your laptop:"
 echo "    appliance/make-label.sh $(hostname).local"
 
+say "wifi watchdog"
+# NetworkManager on a headless Pi stops reconnecting to a network after one
+# failure that looks like a wrong password. This puts it back every 2
+# minutes; it does nothing on Ethernet. See the script.
+sudo install -d -m 0755 /opt/carelink-wifi-watchdog
+sudo install -m 0755 "$SRC/appliance/wifi-watchdog/carelink-wifi-watchdog.sh" /opt/carelink-wifi-watchdog/
+sudo install -m 0644 "$SRC/appliance/systemd/carelink-wifi-watchdog.service" /etc/systemd/system/
+sudo install -m 0644 "$SRC/appliance/systemd/carelink-wifi-watchdog.timer"   /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now carelink-wifi-watchdog.timer >/dev/null 2>&1
+
 say "done"
 cat <<EOF
 
