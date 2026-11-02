@@ -1,0 +1,7 @@
+[Unit]
+Description=Keep the display's fallback hotspot (carelink-travel) up, on the WiFi's channel
+After=NetworkManager.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/carelink-travel-ap/carelink-travel-ap.sh

@@ -1,0 +1,10 @@
+[Unit]
+Description=Check every minute that the display's fallback hotspot is up
+
+[Timer]
+# Not before the setup hotspot has decided at boot (90 s wait).
+OnBootSec=2min
+OnUnitActiveSec=1min
+
+[Install]
+WantedBy=timers.target
