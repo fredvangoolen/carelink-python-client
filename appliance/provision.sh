@@ -23,6 +23,10 @@ VNCPASSWD="/home/${RENEW_USER}/.vnc/passwd"
 WIFI_COUNTRY="${WIFI_COUNTRY:-BE}"   # regulatory domain; the radio stays off without one
 AP_DIR="/opt/carelink-setup-ap"
 AP_PSK_FILE="/etc/carelink/setup-ap.psk"
+# The display's fallback hotspot. 0 for a Pi that never leaves the house
+# (pi.hole): it then gets no second access point on its radio.
+TRAVEL_AP="${TRAVEL_AP:-1}"
+TRAVEL_PSK_FILE="/etc/carelink/travel-ap.psk"
 
 say() { printf '\n== %s\n' "$*"; }
 
@@ -171,8 +175,9 @@ sudo install -m 0755 "$SRC/appliance/setup-ap/carelink-setup-ap.sh" "$AP_DIR/"
 sudo install -m 0644 "$SRC/appliance/setup-ap/setup_ap_server.py"   "$AP_DIR/"
 sudo install -m 0644 "$SRC/appliance/systemd/carelink-setup-ap.service" /etc/systemd/system/
 # Captive portal: on the hotspot every name resolves to the Pi, so a phone
-# opens the setup page by itself. Applies to NetworkManager "shared"
-# connections only, which on this box is the hotspot alone.
+# opens the setup page by itself. Applies to every NetworkManager "shared"
+# connection - the display's carelink-travel hotspot too, whose firewall
+# therefore drops DNS (the display needs only mDNS there).
 sudo install -d -m 0755 /etc/NetworkManager/dnsmasq-shared.d
 echo "address=/#/10.42.0.1" | sudo tee /etc/NetworkManager/dnsmasq-shared.d/carelink-setup-ap.conf >/dev/null
 # One password per Pi, made once and kept across re-runs: it is on the
@@ -208,6 +213,43 @@ sudo install -m 0644 "$SRC/appliance/systemd/carelink-wifi-watchdog.service" /et
 sudo install -m 0644 "$SRC/appliance/systemd/carelink-wifi-watchdog.timer"   /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now carelink-wifi-watchdog.timer >/dev/null 2>&1
+
+if [[ "$TRAVEL_AP" == 1 ]]; then
+say "display fallback hotspot (carelink-travel)"
+# Plan B for the display: a private hotspot next to the Pi's own WiFi, which
+# the display uses when the household network does not get it to the proxy.
+# Always up once the Pi has a network. See appliance/travel-ap/.
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends iw
+sudo install -d -m 0755 /opt/carelink-travel-ap
+sudo install -m 0755 "$SRC/appliance/travel-ap/carelink-travel-ap.sh" /opt/carelink-travel-ap/
+sudo install -m 0644 "$SRC/appliance/systemd/carelink-travel-ap.service" /etc/systemd/system/
+sudo install -m 0644 "$SRC/appliance/systemd/carelink-travel-ap.timer"   /etc/systemd/system/
+# One password per Pi, made once and kept: the display has it in its NVS,
+# and a re-run must not cut the display off. A profile made by hand before
+# this existed keeps its password too.
+if ! sudo test -s "$TRAVEL_PSK_FILE"; then
+  sudo install -d -m 0700 "$(dirname "$TRAVEL_PSK_FILE")"
+  if sudo nmcli con show carelink-travel >/dev/null 2>&1; then
+    sudo nmcli -s -g 802-11-wireless-security.psk con show carelink-travel | sudo tee "$TRAVEL_PSK_FILE" >/dev/null
+  else
+    python3 -c 'import secrets,string; a=string.ascii_letters+string.digits; print("".join(secrets.choice(a) for _ in range(24)))' \
+      | sudo tee "$TRAVEL_PSK_FILE" >/dev/null
+  fi
+  sudo chmod 0600 "$TRAVEL_PSK_FILE"
+fi
+TRAVEL_PSK="$(sudo cat "$TRAVEL_PSK_FILE")"
+sudo nmcli con delete carelink-travel >/dev/null 2>&1 || true
+sudo nmcli con add type wifi ifname uap0 con-name carelink-travel autoconnect no \
+    ssid carelink-travel mode ap 802-11-wireless.band bg 802-11-wireless.channel 1 \
+    ipv4.method shared ipv4.addresses 10.43.0.1/24 ipv6.method disabled \
+    wifi-sec.key-mgmt wpa-psk wifi-sec.proto rsn wifi-sec.pairwise ccmp wifi-sec.group ccmp \
+    wifi-sec.psk "$TRAVEL_PSK" >/dev/null
+unset TRAVEL_PSK
+sudo systemctl daemon-reload
+sudo systemctl enable --now carelink-travel-ap.timer >/dev/null 2>&1
+echo "Display fallback hotspot: carelink-travel. Its password, for the display's"
+echo "fallback slot:  sudo cat $TRAVEL_PSK_FILE"
+fi
 
 say "done"
 cat <<EOF

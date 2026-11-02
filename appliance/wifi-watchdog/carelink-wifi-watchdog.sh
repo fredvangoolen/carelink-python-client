@@ -36,7 +36,7 @@ IFS=: read -r _ _ state con <<<"$wifi_line"
 
 # Saved WiFi networks, most recently used first; the hotspot is not one.
 mapfile -t profiles < <(nmcli -t -f TIMESTAMP,TYPE,NAME con show 2>/dev/null |
-  awk -F: -v ap="$AP_CON" '$2=="802-11-wireless" && $3!=ap {print $1":"$3}' |
+  awk -F: -v ap="$AP_CON" '$2=="802-11-wireless" && $3!=ap && $3!="carelink-travel" {print $1":"$3}' |
   sort -t: -k1,1nr | cut -d: -f2-)
 [[ ${#profiles[@]} -gt 0 ]] || exit 0
 

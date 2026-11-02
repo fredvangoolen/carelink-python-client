@@ -27,10 +27,11 @@ SERVER="/opt/carelink-setup-ap/setup_ap_server.py"
 log() { echo "setup-ap: $*"; }
 
 connected() {
-  # Any Ethernet or WiFi device NetworkManager calls connected - except our
-  # own hotspot, which also reads "connected".
+  # Any Ethernet or WiFi device NetworkManager calls connected - except the
+  # hotspots, ours and the display's carelink-travel, which also read
+  # "connected" and are no way out to the internet.
   nmcli -t -f DEVICE,TYPE,STATE,CONNECTION dev 2>/dev/null |
-    awk -F: -v con="$CON" '($2=="ethernet"||$2=="wifi") && $3=="connected" && $4!=con {f=1} END {exit !f}'
+    awk -F: -v con="$CON" '($2=="ethernet"||$2=="wifi") && $3=="connected" && $4!=con && $4!="carelink-travel" {f=1} END {exit !f}'
 }
 
 teardown() {
@@ -50,6 +51,9 @@ fi
 
 nmcli con show "$CON" >/dev/null 2>&1 || { log "ERROR: no $CON profile - run provision.sh"; exit 1; }
 nmcli radio wifi on
+# The radio has room for one access point. carelink-travel-ap stands aside
+# while this service is active; this covers a FORCE=1 test started under it.
+nmcli con down carelink-travel >/dev/null 2>&1 || true
 
 # Scan BEFORE the hotspot is up: one radio cannot list networks while it is
 # an access point, and the page offers what was found.

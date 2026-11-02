@@ -127,6 +127,49 @@ Ethernet. `journalctl -u carelink-wifi-watchdog` lists every reconnect, which
 also shows a flaky router. Test it on a Pi that is on the cable with
 `sudo IGNORE_ETHERNET=1 /opt/carelink-wifi-watchdog/carelink-wifi-watchdog.sh`.
 
+## Display fallback hotspot (carelink-travel)
+
+The display normally reaches the proxy over the household network (plan A).
+Some networks never let it: a holiday-house router may keep its clients
+apart, and the display may simply not know that WiFi. So the Pi also runs a
+private WPA2 hotspot, `carelink-travel` at 10.43.0.1, **always**, next to its
+own WiFi connection, and the display uses it as plan B: only when plan A does
+not reach the proxy, retrying plan A every hour. The display side is in the
+Core Ink firmware's README ("Plan B: the Pi's hotspot"); its fallback slot
+(slot 2) holds this hotspot's name and password.
+
+The radio makes this possible but narrow. The Pi 4's brcmfmac allows one
+station and one access point at once, on **one channel** (`iw list`:
+`#{ managed } <= 1, #{ AP } <= 1, #channels <= 1`), and the display is
+2.4 GHz only. So `carelink-travel-ap.timer`, every minute:
+
+- moves the Pi's own WiFi to 2.4 GHz (`802-11-wireless.band bg` on that
+  profile) if it is on 5 GHz — and puts it back, with no hotspot, if that
+  network has no 2.4 GHz radio there; tried once per network per boot;
+- runs the hotspot on the Pi's WiFi channel, or on channel 1 when the Pi is
+  on Ethernet with WiFi unused;
+- adds the second interface, `uap0`, which is gone after every reboot;
+- stands aside while the setup hotspot runs (one access point only) and
+  while the Pi's WiFi has no network or is looking for one.
+
+Measured 2026-11-02 at a holiday house offering the same network on 5 GHz
+channel 44 and 2.4 GHz channel 1: pinned to 2.4 GHz the Pi kept its
+internet, both ran on channel 1, and the display joined the hotspot in 5 s at
+-41 dBm and fetched in 0.1 s.
+
+Its clients reach DHCP, mDNS (the display looks up `<host>.local`) and the
+proxy on 8081, and nothing else: no SSH, no DNS, nothing forwarded (nftables
+table `carelink_travel_ap`). DNS is dropped because the setup hotspot's
+captive-portal rule in `dnsmasq-shared.d` applies to every NetworkManager
+"shared" connection and would answer every name with 10.42.0.1 here too.
+
+The password is made once per Pi by `provision.sh`, kept in
+`/etc/carelink/travel-ap.psk` (root, 0600) and never changed by a re-run,
+since the display has it; `sudo cat` it to set up a display. A profile made
+by hand before this existed keeps its password. `TRAVEL_AP=0 ./provision.sh`
+leaves the whole thing out, for a Pi that never leaves the house (pi.hole).
+`journalctl -u carelink-travel-ap` shows every change it made.
+
 ## Renewing a token
 
 First make sure one is needed. A proxy that could not start, for example
